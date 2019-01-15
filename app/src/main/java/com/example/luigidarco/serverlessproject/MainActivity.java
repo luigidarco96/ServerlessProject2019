@@ -22,6 +22,7 @@ import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
@@ -29,6 +30,8 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -42,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
     private String username = "pdqazret";
     private String password = "Ho1GRTbYFktu";
     private String clientID;
+
+    private String locationMessage = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
 
                 getLocation();
-                sendMqtt();
+                sendMqtt("Luigi", locationMessage);
             }
         });
 
@@ -92,18 +97,29 @@ public class MainActivity extends AppCompatActivity {
 
                                 String message = "http://maps.google.com/maps?saddr=" + lat + "," + lon;
 
-                                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                                ClipData clip = ClipData.newPlainText("test", message);
-                                clipboard.setPrimaryClip(clip);
-
                                 Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+
+                                locationMessage = message;
                             }
                         }
                     });
         }
     }
 
-    private void sendMqtt() {
+    private void sendMqtt(String name, String location) {
+
+
+        //final String jsonMessage = "{\"value1\":\""+name+"\", \"value2\": \""+location+"\"}";
+
+        final JSONObject jsonMessage = new JSONObject();
+        try {
+            jsonMessage.put("value1", name);
+            jsonMessage.put("value2", location);
+        }
+        catch (JSONException e) {
+            e.printStackTrace();
+        }
+
 
         try {
             clientMqtt.connect(options).setActionCallback(new IMqttActionListener() {
@@ -112,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.d("LOG", "Client connected");
                     Log.d("LOG", "Topics=" + mqttToken.getTopics());
 
-                    MqttMessage message = new MqttMessage("Hello, I am Android Mqtt Client.".getBytes());
+                    MqttMessage message = new MqttMessage(jsonMessage.toString().getBytes());
                     message.setQos(0);
                     message.setRetained(false);
 
@@ -120,8 +136,26 @@ public class MainActivity extends AppCompatActivity {
                         clientMqtt.publish("iot/messages", message);
                         Log.d("LOG", "Message published");
 
-                        clientMqtt.disconnect();
-                        Log.d("LOG", "client disconnected");
+                        clientMqtt.setCallback(new MqttCallback() {
+
+                            @Override
+                            public void connectionLost(Throwable cause) {
+
+                            }
+
+                            @Override
+                            public void messageArrived(String topic, MqttMessage message) throws Exception {
+                                Log.d("LOG", message.toString());
+                            }
+
+                            @Override
+                            public void deliveryComplete(IMqttDeliveryToken token) {
+
+                            }
+                        });
+
+                    clientMqtt.disconnect();
+                    Log.d("LOG", "client disconnected");
 
                     } catch (MqttPersistenceException e) {
                         // TODO Auto-generated catch block
