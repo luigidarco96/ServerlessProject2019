@@ -23,6 +23,8 @@ import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
@@ -34,10 +36,12 @@ public class MainActivity extends AppCompatActivity {
     private Button emergencyButton;
 
     private MqttAndroidClient clientMqtt;
+    private MqttConnectOptions options;
 
-    private String serverURI = "m15.cloudmqtt.com:10878";
+    private String serverURI = "tcp://m15.cloudmqtt.com:10878";
     private String username = "pdqazret";
-    private String password = "";
+    private String password = "Ho1GRTbYFktu";
+    private String clientID;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,8 +52,16 @@ public class MainActivity extends AppCompatActivity {
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        MemoryPersistence memPer = new MemoryPersistence();
-        clientMqtt = new MqttAndroidClient(this.getApplicationContext(), serverURI, username, memPer);
+
+        //Initialize MQTTClient
+        clientID = MqttClient.generateClientId();
+        clientMqtt = new MqttAndroidClient(this.getApplicationContext(), serverURI, clientID);
+
+        options = new MqttConnectOptions();
+        options.setMqttVersion(MqttConnectOptions.MQTT_VERSION_3_1);
+        options.setCleanSession(false);
+        options.setUserName(username);
+        options.setPassword(password.toCharArray());
 
         emergencyButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -92,19 +104,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sendMqtt() {
+
         try {
-            clientMqtt.connect(null, new IMqttActionListener() {
+            clientMqtt.connect(options).setActionCallback(new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken mqttToken) {
                     Log.d("LOG", "Client connected");
                     Log.d("LOG", "Topics=" + mqttToken.getTopics());
 
                     MqttMessage message = new MqttMessage("Hello, I am Android Mqtt Client.".getBytes());
-                    message.setQos(2);
+                    message.setQos(0);
                     message.setRetained(false);
 
                     try {
-                        clientMqtt.publish("messages", message);
+                        clientMqtt.publish("iot/messages", message);
                         Log.d("LOG", "Message published");
 
                         clientMqtt.disconnect();

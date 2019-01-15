@@ -21,8 +21,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
 
-    <service android:name="org.eclipse.paho.android.service.MqttService" />
+        <service android:name="org.eclipse.paho.android.service.MqttService" />
+    </application>
 
 </manifest>
