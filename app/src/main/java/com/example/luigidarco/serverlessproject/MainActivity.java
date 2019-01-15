@@ -9,6 +9,7 @@ import android.location.Location;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
@@ -17,10 +18,26 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
 
+import org.eclipse.paho.android.service.MqttAndroidClient;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+
 public class MainActivity extends AppCompatActivity {
 
     private FusedLocationProviderClient mFusedLocationClient;
     private Button emergencyButton;
+
+    private MqttAndroidClient clientMqtt;
+
+    private String serverURI = "m15.cloudmqtt.com:10878";
+    private String username = "pdqazret";
+    private String password = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,11 +48,15 @@ public class MainActivity extends AppCompatActivity {
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
+        MemoryPersistence memPer = new MemoryPersistence();
+        clientMqtt = new MqttAndroidClient(this.getApplicationContext(), serverURI, username, memPer);
+
         emergencyButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
                 getLocation();
+                sendMqtt();
             }
         });
 
@@ -69,4 +90,44 @@ public class MainActivity extends AppCompatActivity {
                     });
         }
     }
+
+    private void sendMqtt() {
+        try {
+            clientMqtt.connect(null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken mqttToken) {
+                    Log.d("LOG", "Client connected");
+                    Log.d("LOG", "Topics=" + mqttToken.getTopics());
+
+                    MqttMessage message = new MqttMessage("Hello, I am Android Mqtt Client.".getBytes());
+                    message.setQos(2);
+                    message.setRetained(false);
+
+                    try {
+                        clientMqtt.publish("messages", message);
+                        Log.d("LOG", "Message published");
+
+                        clientMqtt.disconnect();
+                        Log.d("LOG", "client disconnected");
+
+                    } catch (MqttPersistenceException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+
+                    } catch (MqttException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    Log.d("LOG", "Client connection failed: " + exception.getMessage());
+                }
+            });
+        } catch (MqttException e) {
+            e.printStackTrace();
+        }
+    }
+
 }
