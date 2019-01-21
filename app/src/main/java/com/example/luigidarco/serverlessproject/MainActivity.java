@@ -4,7 +4,10 @@ import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -12,6 +15,8 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -33,30 +38,76 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 public class MainActivity extends AppCompatActivity {
 
     private FusedLocationProviderClient mFusedLocationClient;
+
+    private SharedPreferences sp;
+
     private Button emergencyButton;
+    private LinearLayout nameLayout;
+    private EditText editName;
+    private Button saveName;
 
     private MqttAndroidClient clientMqtt;
     private MqttConnectOptions options;
 
+    //CloudMQTT
+    /*
     private String serverURI = "tcp://m15.cloudmqtt.com:10878";
     private String username = "pdqazret";
     private String password = "Ho1GRTbYFktu";
     private String clientID;
+    */
 
-    private String locationMessage = "";
+    //RabbitMQ
+    private String serverURI = "tcp://172.19.24.138:1883";
+    private String username = "guest";
+    private String password = "guest";
+    private String clientID;
+
+    public String memberName;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        nameLayout = findViewById(R.id.nameLayout);
         emergencyButton = findViewById(R.id.buttonEmergency);
+        editName = findViewById(R.id.editName);
+        saveName = findViewById(R.id.saveName);
+
+        saveName.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+               String insertedName = editName.getText().toString();
+               if (insertedName == "") {
+                   Toast.makeText(MainActivity.this, "Please insert a valid name", Toast.LENGTH_SHORT).show();
+               } else {
+                   sp.edit().putString("username", insertedName).commit();
+                   finish();
+                   startActivity(getIntent());
+               }
+            }
+        });
+
+
+        //Get the member name
+        sp = getSharedPreferences("SavedName", Context.MODE_PRIVATE);
+        memberName = sp.getString("username", "");
+        if (memberName == "") {
+            nameLayout.setVisibility(View.VISIBLE);
+        } else {
+            emergencyButton.setVisibility(View.VISIBLE);
+        }
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-
 
         //Initialize MQTTClient
         clientID = MqttClient.generateClientId();
@@ -72,14 +123,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
 
-                getLocation();
-                sendMqtt("Luigi", locationMessage);
+                getLocationAndPublishMessage();
             }
         });
 
     }
 
-    public void getLocation() {
+    public void getLocationAndPublishMessage() {
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
 
@@ -90,31 +140,31 @@ public class MainActivity extends AppCompatActivity {
                     .addOnSuccessListener(this, new OnSuccessListener<Location>() {
                         @Override
                         public void onSuccess(Location location) {
-                            // Got last known location. In some rare situations this can be null.
                             if (location != null) {
                                 double lat = location.getLatitude();
                                 double lon = location.getLongitude();
 
                                 String message = "http://maps.google.com/maps?saddr=" + lat + "," + lon;
 
-                                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                                //String address = getAddress(lat, lon);
 
-                                locationMessage = message;
+                                sendMqtt(memberName, message);
+
                             }
                         }
                     });
         }
     }
 
-    private void sendMqtt(String name, String location) {
 
+    private void sendMqtt(String name, String address) {
 
         //final String jsonMessage = "{\"value1\":\""+name+"\", \"value2\": \""+location+"\"}";
 
         final JSONObject jsonMessage = new JSONObject();
         try {
             jsonMessage.put("value1", name);
-            jsonMessage.put("value2", location);
+            jsonMessage.put("value2", address);
         }
         catch (JSONException e) {
             e.printStackTrace();
@@ -133,26 +183,10 @@ public class MainActivity extends AppCompatActivity {
                     message.setRetained(false);
 
                     try {
-                        clientMqtt.publish("iot/messages", message);
+                        IMqttDeliveryToken tokenInvio = clientMqtt.publish("iot/messages", message);
+
                         Log.d("LOG", "Message published");
-
-                        clientMqtt.setCallback(new MqttCallback() {
-
-                            @Override
-                            public void connectionLost(Throwable cause) {
-
-                            }
-
-                            @Override
-                            public void messageArrived(String topic, MqttMessage message) throws Exception {
-                                Log.d("LOG", message.toString());
-                            }
-
-                            @Override
-                            public void deliveryComplete(IMqttDeliveryToken token) {
-
-                            }
-                        });
+                        Toast.makeText(MainActivity.this, "Message published", Toast.LENGTH_SHORT).show();
 
                     clientMqtt.disconnect();
                     Log.d("LOG", "client disconnected");
